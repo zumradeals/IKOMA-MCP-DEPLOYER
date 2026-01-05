@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""CLI IKOMA BRIDGE (stub).
+
+Offre l'aide et la structure des commandes futures sans implémentation métier.
+"""
+from __future__ import annotations
+
+import argparse
+from typing import List
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="IKOMA BRIDGE CLI (stub)")
+
+    subparsers = parser.add_subparsers(dest="command", required=False)
+
+    deploy_parser = subparsers.add_parser("deploy", help="Gestion des déploiements")
+    deploy_sub = deploy_parser.add_subparsers(dest="deploy_cmd", required=False)
+    deploy_sub.add_parser("up", help="Déclencher un déploiement vers un environnement")
+    deploy_sub.add_parser("rollback", help="Revenir à une version précédente")
+
+    pipeline_parser = subparsers.add_parser("pipeline", help="Pilotage des pipelines")
+    pipeline_sub = pipeline_parser.add_subparsers(dest="pipeline_cmd", required=False)
+    pipeline_sub.add_parser("run", help="Lancer un pipeline Lovable → GitHub → VPS")
+
+    supabase_parser = subparsers.add_parser("supabase", help="Opérations Supabase")
+    supabase_parser.add_parser("ensure", help="Vérifier/initialiser les ressources Supabase nécessaires")
+
+    backup_parser = subparsers.add_parser("backup", help="Gestion des sauvegardes")
+    backup_parser.add_parser("run", help="Lancer un backup applicatif/infra")
+
+    restore_parser = subparsers.add_parser("restore", help="Gestion des restaurations")
+    restore_parser.add_parser("run", help="Restaurer un backup spécifié")
+
+    return parser
+
+
+def main(args: List[str] | None = None) -> int:
+    parser = build_parser()
+    parser.parse_args(args=args)
+    # Ici, aucune logique métier : uniquement l'affichage de l'aide/structure.
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
