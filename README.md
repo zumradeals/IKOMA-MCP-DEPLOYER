@@ -24,4 +24,5 @@ Conditions :
 - `docker compose` doit être disponible localement ;
 - les logs sont écrits dans `data/logs/<app_id>/deploy.log` et le statut dans `data/ikoma.db`.
 
+
 Consultez `docs/ARCHITECTURE.md` pour la vision complète et `docs/ROADMAP.md` pour les jalons à venir.

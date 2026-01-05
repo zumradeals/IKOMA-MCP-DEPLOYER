@@ -6,7 +6,10 @@ Offre l'aide et la structure des commandes futures sans implémentation métier.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import List
+
+from core.services.supabase import supabase_apply_migrations
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,7 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_sub.add_parser("run", help="Lancer un pipeline Lovable → GitHub → VPS")
 
     supabase_parser = subparsers.add_parser("supabase", help="Opérations Supabase")
-    supabase_parser.add_parser("ensure", help="Vérifier/initialiser les ressources Supabase nécessaires")
+    supabase_sub = supabase_parser.add_subparsers(dest="supabase_cmd", required=False)
+    supabase_sub.add_parser("ensure", help="Vérifier/initialiser les ressources Supabase nécessaires")
+    migrate_cmd = supabase_sub.add_parser("migrate", help="Appliquer les migrations Supabase")
+    migrate_cmd.add_argument("--app", required=True, dest="app_id", help="Identifiant applicatif")
+    migrate_cmd.add_argument("--repo", required=True, dest="repo_path", help="Chemin du dépôt à migrer")
 
     backup_parser = subparsers.add_parser("backup", help="Gestion des sauvegardes")
     backup_parser.add_parser("run", help="Lancer un backup applicatif/infra")
@@ -37,7 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(args: List[str] | None = None) -> int:
     parser = build_parser()
-    parser.parse_args(args=args)
+    parsed = parser.parse_args(args=args)
+
+    if parsed.command == "supabase" and parsed.supabase_cmd == "migrate":
+        supabase_apply_migrations(parsed.app_id, Path(parsed.repo_path))
+        return 0
+
     # Ici, aucune logique métier : uniquement l'affichage de l'aide/structure.
     return 0
 
