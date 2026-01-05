@@ -31,9 +31,10 @@ Une commande CLI applique les fichiers `.sql` d'une application sur une instance
 ./cli/ikoma supabase migrate --app <app_id> --repo /chemin/vers/le/repo
 ```
 
-Variables de connexion supportées :
+Variables de connexion supportées (DSN prioritaire) :
 - `SUPABASE_DB_DSN` (DSN Postgres complet) ;
 - ou les variables `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
+`SUPABASE_DB_SCHEMA` permet de fixer le `search_path` (par défaut `public`).
 
 Les migrations sont appliquées dans l'ordre lexicographique depuis `supabase/migrations`, chaque fichier étant exécuté dans une transaction et enregistré dans la table `ikoma_migrations`. Les résultats sont tracés dans `data/logs/<app_id>/supabase.log` et le statut final est consigné dans `data/ikoma.db`.
 

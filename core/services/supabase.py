@@ -1,6 +1,7 @@
 """Gestion minimale des migrations Supabase (Postgres self-host)."""
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Mapping, Optional
 
 import psycopg2
 from psycopg2.extensions import connection as PgConnection
+from psycopg2 import sql
 
 from core.logging.logger import build_logger
 from core.store.sqlite_store import DeploymentState
@@ -80,32 +82,85 @@ def _ensure_tracking_table(conn: PgConnection) -> None:
             CREATE TABLE IF NOT EXISTS ikoma_migrations (
                 id SERIAL PRIMARY KEY,
                 app_id TEXT NOT NULL,
-                name TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                checksum TEXT NOT NULL,
                 applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE(app_id, name)
+                UNIQUE(app_id, filename)
             )
             """
         )
+
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'ikoma_migrations'
+            """
+        )
+        columns = {row[0] for row in cur.fetchall()}
+
+        if "name" in columns and "filename" not in columns:
+            cur.execute("ALTER TABLE ikoma_migrations RENAME COLUMN name TO filename")
+            columns.discard("name")
+            columns.add("filename")
+
+        if "checksum" not in columns:
+            cur.execute("ALTER TABLE ikoma_migrations ADD COLUMN checksum TEXT")
+
+        cur.execute("UPDATE ikoma_migrations SET checksum = '' WHERE checksum IS NULL")
+        cur.execute("ALTER TABLE ikoma_migrations ALTER COLUMN checksum SET NOT NULL")
+        cur.execute(
+            "ALTER TABLE ikoma_migrations DROP CONSTRAINT IF EXISTS ikoma_migrations_app_id_name_key"
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints tc
+                    WHERE tc.table_name = 'ikoma_migrations'
+                      AND tc.constraint_name = 'ikoma_migrations_app_id_filename_key'
+                ) THEN
+                    ALTER TABLE ikoma_migrations
+                    ADD CONSTRAINT ikoma_migrations_app_id_filename_key UNIQUE(app_id, filename);
+                END IF;
+            END;
+            $$;
+            """
+        )
+
         conn.commit()
 
 
-def _migration_already_applied(conn: PgConnection, app_id: str, name: str) -> bool:
+def _get_existing_checksum(conn: PgConnection, app_id: str, filename: str) -> tuple[bool, str | None]:
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT 1 FROM ikoma_migrations WHERE app_id=%s AND name=%s LIMIT 1",
-            (app_id, name),
+            """
+            SELECT checksum
+            FROM ikoma_migrations
+            WHERE app_id=%s AND filename=%s
+            LIMIT 1
+            """,
+            (app_id, filename),
         )
-        return cur.fetchone() is not None
+        row = cur.fetchone()
+        if not row:
+            return False, None
+        return True, row[0]
 
 
-def _apply_file(conn: PgConnection, app_id: str, path: Path) -> None:
-    sql = path.read_text(encoding="utf-8")
+def _apply_file(conn: PgConnection, app_id: str, path: Path, checksum: str) -> None:
+    sql_content = path.read_text(encoding="utf-8")
     with conn.cursor() as cur:
         try:
-            cur.execute(sql)
+            cur.execute(sql_content)
             cur.execute(
-                "INSERT INTO ikoma_migrations(app_id, name) VALUES(%s, %s)",
-                (app_id, path.name),
+                """
+                INSERT INTO ikoma_migrations(app_id, filename, checksum)
+                VALUES(%s, %s, %s)
+                """,
+                (app_id, path.name, checksum),
             )
             conn.commit()
         except Exception:
@@ -137,15 +192,36 @@ def supabase_apply_migrations(
     conn: PgConnection | None = None
     try:
         conn = supabase_connect()
+        logger.info(
+            "Connexion Supabase: host=%s port=%s db=%s user=%s",
+            conn.info.host,
+            conn.info.port,
+            conn.info.dbname,
+            conn.info.user,
+        )
+
+        schema = (os.environ.get("SUPABASE_DB_SCHEMA") or "public").strip() or "public"
+        with conn.cursor() as cur:
+            cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+        logger.info("search_path fixé à %s", schema)
+
         _ensure_tracking_table(conn)
 
         for sql_file in sorted(p for p in migrations_path.glob("*.sql") if p.is_file()):
-            if _migration_already_applied(conn, app_id, sql_file.name):
+            checksum = hashlib.sha256(sql_file.read_bytes()).hexdigest()
+            exists, existing_checksum = _get_existing_checksum(conn, app_id, sql_file.name)
+            if exists:
+                if existing_checksum and existing_checksum != checksum:
+                    error_message = (
+                        "Migration déjà appliquée avec un checksum différent: %s"
+                        % sql_file.name
+                    )
+                    raise ValueError(error_message)
                 logger.info("Migration déjà appliquée, skip: %s", sql_file.name)
                 continue
 
             logger.info("Application de %s", sql_file.name)
-            _apply_file(conn, app_id, sql_file)
+            _apply_file(conn, app_id, sql_file, checksum)
             applied.append(sql_file.name)
 
         message = f"{len(applied)} migration(s) appliquée(s)"
