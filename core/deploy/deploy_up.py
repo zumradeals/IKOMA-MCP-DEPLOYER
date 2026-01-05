@@ -39,17 +39,7 @@ class ReleaseConfig:
     health: Dict[str, object]
 
 
-from core.deploy.compose import compose_up
-from core.deploy.health import wait_for_health
-from core.deploy.preflight import (
-    ensure_directories,
-    load_release_config,
-    preflight_environment,
-    preflight_release,
-)
-from core.logging.logger import build_logger
-from core.scm.git_repo import sync_repository
-from core.store.sqlite_store import DeploymentState
+
 
 
 def deploy_up(app_id: str, ref: str) -> None:
@@ -66,18 +56,7 @@ def deploy_up(app_id: str, ref: str) -> None:
     logger = build_logger(app_id, LOGS_DIR)
     logger.info("=== Déploiement %s (%s) démarré ===", app_id, ref)
 
-    db: DeploymentState | None = None
 
-    try:
-        db = DeploymentState(DB_PATH)
-        db.ensure_schema()
-        preflight_environment(logger)
-        ensure_directories(DATA_DIR, REPOS_DIR, LOGS_DIR)
-        repo_dir = sync_repository(app_id, ref, REPOS_DIR, logger)
-        release = load_release_config(repo_dir, RELEASE_FILE)
-        preflight_release(release, logger)
-        compose_up(release, repo_dir, logger)
-        wait_for_health(release.health, logger)
     except Exception as exc:  # noqa: BLE001 - capture volontaire pour tracer l'échec
         message = f"deploy_up échoué: {exc}"
         logger.exception(message)

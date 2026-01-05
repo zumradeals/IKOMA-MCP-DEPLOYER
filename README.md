@@ -24,18 +24,5 @@ Conditions :
 - `docker compose` doit être disponible localement ;
 - les logs sont écrits dans `data/logs/<app_id>/deploy.log` et le statut dans `data/ikoma.db`.
 
-### Migrations Supabase (instance self-host existante)
-Une commande CLI applique les fichiers `.sql` d'une application sur une instance Supabase déjà déployée :
-
-```bash
-./cli/ikoma supabase migrate --app <app_id> --repo /chemin/vers/le/repo
-```
-
-Variables de connexion supportées (DSN prioritaire) :
-- `SUPABASE_DB_DSN` (DSN Postgres complet) ;
-- ou les variables `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`.
-`SUPABASE_DB_SCHEMA` permet de fixer le `search_path` (par défaut `public`).
-
-Les migrations sont appliquées dans l'ordre lexicographique depuis `supabase/migrations`, chaque fichier étant exécuté dans une transaction et enregistré dans la table `ikoma_migrations`. Les résultats sont tracés dans `data/logs/<app_id>/supabase.log` et le statut final est consigné dans `data/ikoma.db`.
 
 Consultez `docs/ARCHITECTURE.md` pour la vision complète et `docs/ROADMAP.md` pour les jalons à venir.
