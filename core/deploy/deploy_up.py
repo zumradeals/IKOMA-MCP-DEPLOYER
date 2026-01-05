@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import subprocess
 import time
@@ -29,7 +30,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 REPOS_DIR = DATA_DIR / "repos"
 LOGS_DIR = DATA_DIR / "logs"
-DB_PATH = DATA_DIR / "state.sqlite"
+DB_PATH = DATA_DIR / "ikoma.db"
 RELEASE_FILE = "ikoma.release.json"
 DEFAULT_HEALTH_TIMEOUT = 60  # secondes
 DEFAULT_HEALTH_INTERVAL = 2  # secondes
@@ -47,6 +48,21 @@ class ReleaseConfig:
     health: Dict[str, object]
 
 
+def _preflight_environment(logger: logging.Logger) -> None:
+    """Vérifie la présence des dépendances indispensables."""
+
+    for binary in ("docker",):
+        if not shutil.which(binary):
+            raise DeployError(f"Binaire requis introuvable: {binary}")
+
+    # Vérification explicite du plugin/CLI docker compose
+    _run(["docker", "--version"], logger=logger)
+    _run(["docker", "compose", "version"], logger=logger)
+
+    for directory in (DATA_DIR, REPOS_DIR, LOGS_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
+
+
 def deploy_up(app_id: str, ref: str) -> None:
     """Déploie une application unique via Docker Compose.
 
@@ -61,18 +77,25 @@ def deploy_up(app_id: str, ref: str) -> None:
     logger = _build_logger(app_id)
     logger.info("=== Déploiement %s (%s) démarré ===", app_id, ref)
 
-    db = _DeploymentState(DB_PATH)
-    db.ensure_schema()
+    db: _DeploymentState | None = None
 
     try:
+        db = _DeploymentState(DB_PATH)
+        db.ensure_schema()
+        _preflight_environment(logger)
         repo_dir = _sync_repository(app_id, ref, logger)
         release = _load_release_config(repo_dir)
+        _preflight_release(release, logger)
         _compose_up(release, repo_dir, logger)
         _wait_for_health(release.health, logger)
     except Exception as exc:  # noqa: BLE001 - capture volontaire pour tracer l'échec
         message = f"deploy_up échoué: {exc}"
         logger.exception(message)
-        db.upsert_status(app_id, ref, "FAILED", message)
+        if db is not None:
+            try:
+                db.upsert_status(app_id, ref, "FAILED", message)
+            except Exception as db_exc:  # noqa: BLE001 - traçage secondaire
+                logger.exception("Impossible d'écrire le statut d'échec: %s", db_exc)
         raise DeployError(message) from exc
 
     db.upsert_status(app_id, ref, "HEALTHY", "Déploiement validé par healthcheck")
@@ -168,19 +191,65 @@ def _load_release_config(repo_dir: Path) -> ReleaseConfig:
     if not release_path.exists():
         raise DeployError(f"Manifest {RELEASE_FILE} introuvable dans {repo_dir}")
 
-    with release_path.open("r", encoding="utf-8") as f:
-        payload = json.load(f)
+    try:
+        with release_path.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except json.JSONDecodeError as exc:  # noqa: B904 - message métier
+        raise DeployError(f"Manifest {RELEASE_FILE} invalide: {exc}") from exc
+
+    _validate_release_payload(payload, release_path)
 
     compose_file = repo_dir / payload.get("compose_file", "docker-compose.yml")
     services = list(payload.get("services", []))
     health = dict(payload.get("health", {}))
 
-    if not compose_file.exists():
-        raise DeployError(f"Fichier compose introuvable: {compose_file}")
-    if not health.get("url"):
-        raise DeployError("Le healthcheck HTTP doit définir une clé 'url'")
-
     return ReleaseConfig(compose_file=compose_file, services=services, health=health)
+
+
+def _validate_release_payload(payload: Dict[str, object], release_path: Path) -> None:
+    if not isinstance(payload, dict):
+        raise DeployError(f"Manifest {release_path} doit être un objet JSON")
+
+    compose_file = payload.get("compose_file", "docker-compose.yml")
+    if not isinstance(compose_file, str) or not compose_file.strip():
+        raise DeployError("La clé 'compose_file' doit être une chaîne non vide")
+
+    services = payload.get("services", [])
+    if not isinstance(services, list) or not all(isinstance(s, str) and s for s in services):
+        raise DeployError("La clé 'services' doit être une liste de chaînes")
+
+    health = payload.get("health")
+    if not isinstance(health, dict):
+        raise DeployError("La clé 'health' doit être un objet JSON")
+
+    if not isinstance(health.get("url"), str) or not health.get("url"):
+        raise DeployError("Le healthcheck HTTP doit définir une clé 'url' non vide")
+
+    for numeric_key in ("expected_status", "timeout", "interval", "retries"):
+        if numeric_key in health and not isinstance(health[numeric_key], (int, float)):
+            raise DeployError(f"health.{numeric_key} doit être un nombre si présent")
+
+    if "interval" in health and health["interval"] <= 0:
+        raise DeployError("health.interval doit être strictement positif")
+    if "timeout" in health and health["timeout"] <= 0:
+        raise DeployError("health.timeout doit être strictement positif")
+    if "retries" in health and health["retries"] <= 0:
+        raise DeployError("health.retries doit être strictement positif")
+
+
+def _preflight_release(release: ReleaseConfig, logger: logging.Logger) -> None:
+    if not release.compose_file.exists():
+        raise DeployError(f"Fichier compose introuvable: {release.compose_file}")
+    if not os.access(release.compose_file, os.R_OK):
+        raise DeployError(f"Fichier compose illisible: {release.compose_file}")
+
+    services_list = ", ".join(release.services) if release.services else "tous"
+    logger.info(
+        "Manifest validé: compose=%s, services=%s, health=%s",
+        release.compose_file,
+        services_list,
+        release.health,
+    )
 
 
 def _compose_up(release: ReleaseConfig, repo_dir: Path, logger: logging.Logger) -> None:
@@ -204,24 +273,35 @@ def _wait_for_health(health: Dict[str, object], logger: logging.Logger) -> None:
     expected_status = int(health.get("expected_status", DEFAULT_EXPECTED_STATUS))
     timeout = int(health.get("timeout", DEFAULT_HEALTH_TIMEOUT))
     interval = int(health.get("interval", DEFAULT_HEALTH_INTERVAL))
+    retries = health.get("retries")
+    max_attempts = int(retries) if retries is not None else None
 
     logger.info(
-        "Healthcheck HTTP sur %s (attendu=%s, timeout=%ss, interval=%ss)",
+        "Healthcheck HTTP sur %s (attendu=%s, timeout=%ss, interval=%ss, retries=%s)",
         url,
         expected_status,
         timeout,
         interval,
+        max_attempts or "illimité",
     )
 
     deadline = time.time() + timeout
     last_error: str | None = None
+    attempts = 0
 
     while time.time() < deadline:
+        if max_attempts is not None and attempts >= max_attempts:
+            break
+        attempts += 1
+
+        remaining = max(1, int(deadline - time.time()))
+        request_timeout = min(interval, remaining)
+
         try:
             req = Request(url, method="GET")
-            with urlopen(req, timeout=interval) as resp:  # nosec - URL contrôlée via manifest
+            with urlopen(req, timeout=request_timeout) as resp:  # nosec - URL contrôlée via manifest
                 if resp.status == expected_status:
-                    logger.info("Healthcheck OK (%s)", resp.status)
+                    logger.info("Healthcheck OK (%s) après %s tentative(s)", resp.status, attempts)
                     return
                 last_error = f"Statut inattendu: {resp.status}"
                 logger.warning(last_error)
@@ -234,10 +314,12 @@ def _wait_for_health(health: Dict[str, object], logger: logging.Logger) -> None:
 
         time.sleep(interval)
 
-    raise DeployError(last_error or "Healthcheck expiré")
+    reason = last_error or f"Healthcheck expiré après {attempts} tentative(s)"
+    raise DeployError(reason)
 
 
 def _run(command: List[str], logger: logging.Logger, cwd: Path | None = None) -> None:
+    logger.info("$ %s", " ".join(command))
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -246,9 +328,10 @@ def _run(command: List[str], logger: logging.Logger, cwd: Path | None = None) ->
         text=True,
         check=False,
     )
-    logger.info("$ %s", " ".join(command))
     if result.stdout:
         logger.info(result.stdout.strip())
 
     if result.returncode != 0:
-        raise DeployError(f"Commande échouée ({result.returncode}): {' '.join(command)}")
+        error_msg = f"Commande échouée ({result.returncode}): {' '.join(command)}"
+        logger.error(error_msg)
+        raise DeployError(error_msg)

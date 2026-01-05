@@ -22,6 +22,6 @@ python -c "from core.deploy import deploy_up; deploy_up('demo-app', 'main')"
 Conditions :
 - le dépôt cible doit contenir un `ikoma.release.json` décrivant `compose_file`, `services` et `health.url` ;
 - `docker compose` doit être disponible localement ;
-- les logs sont écrits dans `data/logs/<app_id>/deploy.log` et le statut dans `data/state.sqlite`.
+- les logs sont écrits dans `data/logs/<app_id>/deploy.log` et le statut dans `data/ikoma.db`.
 
 Consultez `docs/ARCHITECTURE.md` pour la vision complète et `docs/ROADMAP.md` pour les jalons à venir.
