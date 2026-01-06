@@ -10,6 +10,11 @@
         th { background: #f7f7f7; text-align: left; }
         .empty { color: #666; }
         .header { display: flex; justify-content: space-between; align-items: center; }
+        .status { padding: 0.5rem; background: #eef; border: 1px solid #ccd; margin: 1rem 0; }
+        form label { display: block; margin-top: 0.5rem; }
+        form input, form select { padding: 4px; width: 100%; }
+        .form-card { border: 1px solid #ddd; padding: 1rem; margin-top: 2rem; }
+        .actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
     </style>
 </head>
 <body>
@@ -18,27 +23,42 @@
         <div>Connues: {{ count }}</div>
     </div>
 
-    {% if deployments %}
+    {% if status_message or status_detail %}
+    <div class="status">
+        <strong>{{ status_message }}</strong>
+        {% if status_detail %}<div>{{ status_detail }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if configs %}
     <table>
         <thead>
             <tr>
                 <th>App</th>
-                <th>Ref</th>
-                <th>Status</th>
-                <th>Message</th>
-                <th>Dernière MAJ</th>
+                <th>Type</th>
+                <th>Repo</th>
+                <th>Branch</th>
+                <th>Path</th>
+                <th>Dernier déploiement</th>
                 <th>Action</th>
             </tr>
         </thead>
         <tbody>
-            {% for app in deployments %}
+            {% for config in configs %}
             <tr>
-                <td>{{ app.app_id }}</td>
-                <td>{{ app.ref }}</td>
-                <td>{{ app.status }}</td>
-                <td>{{ app.message }}</td>
-                <td>{{ app.updated_at }}</td>
-                <td><a href="/apps/{{ app.app_id }}">View</a></td>
+                <td>{{ config.app_id }}</td>
+                <td>{{ config.type_app }}</td>
+                <td>{{ config.repo_git_url }}</td>
+                <td>{{ config.branch }}</td>
+                <td>{{ config.path_deploiement }}</td>
+                <td>
+                    {% if deployments.get(config.app_id) %}
+                        {{ deployments.get(config.app_id).status }} ({{ deployments.get(config.app_id).updated_at }})
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td><a href="/apps/{{ config.app_id }}">Ouvrir</a></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -46,5 +66,35 @@
     {% else %}
         <p class="empty">0 app enregistrée.</p>
     {% endif %}
+
+    <div class="form-card">
+        <h2>Configurer une application</h2>
+        <form method="post" action="/apps">
+            <label>app_id</label>
+            <input type="text" name="app_id" required />
+
+            <label>repo_git_url</label>
+            <input type="text" name="repo_git_url" required />
+
+            <label>branche (default: main)</label>
+            <input type="text" name="branch" value="main" />
+
+            <label>path_deploiement (default: /opt/&lt;app_id&gt;)</label>
+            <input type="text" name="path_deploiement" placeholder="/opt/mon_app" />
+
+            <label>migrations_dir (optionnel)</label>
+            <input type="text" name="migrations_dir" placeholder="supabase/migrations" />
+
+            <label>type_app</label>
+            <select name="type_app">
+                <option value="lovable">lovable</option>
+                <option value="generic" selected>generic</option>
+            </select>
+
+            <div class="actions">
+                <button type="submit">Enregistrer</button>
+            </div>
+        </form>
+    </div>
 </body>
 </html>
