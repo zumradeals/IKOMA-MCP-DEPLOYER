@@ -41,7 +41,7 @@ import sqlite3
 from core.deploy import deploy_up
 from core.deploy.deploy_up import DB_PATH
 
-deploy_up.deploy_up("sample-app", "main")
+deploy_up("sample-app", "main")
 
 with sqlite3.connect(DB_PATH) as conn:
     row = conn.execute(
