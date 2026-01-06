@@ -35,13 +35,15 @@ popd >/dev/null
 export IKOMA_GIT_REMOTE="$REPO_DIR"
 echo "IKOMA_GIT_REMOTE=$IKOMA_GIT_REMOTE"
 echo "apps.register indisponible ; appel direct de deploy_up"
+REPO_CLONE="$ROOT_DIR/data/repos/$APP_ID"
+rm -rf "$REPO_CLONE"
 
 python - <<'PY'
 import sqlite3
 from core.deploy import deploy_up
 from core.deploy.deploy_up import DB_PATH
 
-deploy_up.deploy_up("sample-app", "main")
+deploy_up("sample-app", "main")
 
 with sqlite3.connect(DB_PATH) as conn:
     row = conn.execute(
