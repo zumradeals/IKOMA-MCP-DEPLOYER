@@ -4,8 +4,18 @@ Fusion opérée entre IKOMA MCP (génération) et IKOMA Deployer (exécution), I
 
 ## État du projet
 - **Phase** : ossature initiale (interfaces et stubs).
-- **UI** : aucune interface graphique n'est prévue.
+- **UI** : interface minimale IKOMA Runner disponible (FastAPI + templates).
 - **Cible** : interactions via API et CLI uniquement.
+
+## IKOMA RUNNER (UI Phase 0)
+Une interface web minimale est disponible pour piloter les actions manuelles :
+
+```bash
+pip install -r requirements.txt
+scripts/run_runner.sh  # démarre uvicorn runner.app:app sur :8088 par défaut
+```
+
+Elle liste les applications connues (SQLite `data/ikoma.db`) et permet de déclencher `deploy_up` et `supabase_apply_migrations` sans ajouter de logique métier.
 
 ## Usage (prévu)
 - **CLI** : l'exécutable `cli/ikoma` proposera des commandes pour déclencher les pipelines, suivre les statuts et orchestrer les déploiements.

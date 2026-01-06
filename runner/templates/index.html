@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>IKOMA Runner - Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background: #f7f7f7; text-align: left; }
+        .empty { color: #666; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>IKOMA Runner - Apps</h1>
+        <div>Connues: {{ count }}</div>
+    </div>
+
+    {% if deployments %}
+    <table>
+        <thead>
+            <tr>
+                <th>App</th>
+                <th>Ref</th>
+                <th>Status</th>
+                <th>Message</th>
+                <th>Dernière MAJ</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for app in deployments %}
+            <tr>
+                <td>{{ app.app_id }}</td>
+                <td>{{ app.ref }}</td>
+                <td>{{ app.status }}</td>
+                <td>{{ app.message }}</td>
+                <td>{{ app.updated_at }}</td>
+                <td><a href="/apps/{{ app.app_id }}">View</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p class="empty">0 app enregistrée.</p>
+    {% endif %}
+</body>
+</html>
