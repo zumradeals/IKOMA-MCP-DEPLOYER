@@ -15,7 +15,7 @@ from core.services.supabase import supabase_apply_migrations
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="IKOMA BRIDGE CLI (stub)")
 
-    subparsers = parser.add_subparsers(dest="command", required=False)
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     deploy_parser = subparsers.add_parser("deploy", help="Gestion des déploiements")
     deploy_sub = deploy_parser.add_subparsers(dest="deploy_cmd", required=False)
@@ -34,10 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_cmd.add_argument("--repo", required=True, dest="repo_path", help="Chemin du dépôt à migrer")
 
     backup_parser = subparsers.add_parser("backup", help="Gestion des sauvegardes")
-    backup_parser.add_parser("run", help="Lancer un backup applicatif/infra")
+    backup_sub = backup_parser.add_subparsers(dest="backup_cmd", required=False)
+    backup_sub.add_parser("run", help="Lancer un backup applicatif/infra")
 
     restore_parser = subparsers.add_parser("restore", help="Gestion des restaurations")
-    restore_parser.add_parser("run", help="Restaurer un backup spécifié")
+    restore_sub = restore_parser.add_subparsers(dest="restore_cmd", required=False)
+    restore_sub.add_parser("run", help="Restaurer un backup spécifié")
 
     return parser
 
