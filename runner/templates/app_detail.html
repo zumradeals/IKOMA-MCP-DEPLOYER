@@ -12,9 +12,10 @@
         .logs { list-style: none; padding-left: 0; }
         .logs li { margin: 4px 0; }
         .status { padding: 0.5rem; background: #eef; border: 1px solid #ccd; }
-        form { display: inline-block; margin-right: 1rem; }
+        form { display: block; margin-top: 1rem; }
         label { display: block; margin-top: 0.5rem; }
-        input { padding: 4px; }
+        input, select { padding: 4px; width: 100%; }
+        .actions { display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -27,6 +28,39 @@
         {% if status_detail %}<div>{{ status_detail }}</div>{% endif %}
     </div>
     {% endif %}
+
+    <div class="section">
+        <h2>Configuration</h2>
+        <form method="post" action="/apps/{{ app_id }}/update">
+            <label>repo_git_url</label>
+            <input type="text" name="repo_git_url" value="{{ config.repo_git_url }}" required />
+
+            <label>branche (default: main)</label>
+            <input type="text" name="branch" value="{{ config.branch }}" />
+
+            <label>path_deploiement</label>
+            <input type="text" name="path_deploiement" value="{{ config.path_deploiement }}" />
+
+            <label>migrations_dir (optionnel)</label>
+            <input type="text" name="migrations_dir" value="{{ config.migrations_dir }}" placeholder="supabase/migrations" />
+
+            <label>type_app</label>
+            <select name="type_app">
+                <option value="lovable" {% if config.type_app == 'lovable' %}selected{% endif %}>lovable</option>
+                <option value="generic" {% if config.type_app == 'generic' %}selected{% endif %}>generic</option>
+            </select>
+
+            <div class="actions">
+                <button type="submit">Mettre à jour</button>
+            </div>
+        </form>
+
+        <form method="post" action="/apps/{{ app_id }}/sync">
+            <div class="actions">
+                <button type="submit">Clone / Update</button>
+            </div>
+        </form>
+    </div>
 
     <div class="section">
         <h2>Dernier déploiement</h2>
@@ -59,16 +93,16 @@
     <div class="section">
         <h2>Actions</h2>
         <form method="post" action="/apps/{{ app_id }}/deploy">
-            <label>Ref Git (default main)</label>
-            <input type="text" name="ref" value="main" />
+            <label>Ref Git (default {{ config.branch }})</label>
+            <input type="text" name="ref" value="{{ config.branch }}" />
             <button type="submit">Deploy</button>
         </form>
 
         <form method="post" action="/apps/{{ app_id }}/migrate">
-            <label>Repo path (ex: /opt/ikomaposte)</label>
-            <input type="text" name="repo_path" required />
-            <label>migrations_dir (default supabase/migrations)</label>
-            <input type="text" name="migrations_dir" value="supabase/migrations" />
+            <label>Repo path (default {{ config.path_deploiement }})</label>
+            <input type="text" name="repo_path" value="{{ config.path_deploiement }}" />
+            <label>migrations_dir (default {{ config.migrations_dir or 'supabase/migrations' }})</label>
+            <input type="text" name="migrations_dir" value="{{ config.migrations_dir or 'supabase/migrations' }}" />
             <button type="submit">Migrate</button>
         </form>
     </div>
