@@ -10,6 +10,15 @@ from core.deploy.deploy_up import DEFAULT_EXPECTED_STATUS, DEFAULT_HEALTH_INTERV
 
 def wait_for_health(health: Dict[str, object], logger) -> None:
     url = str(health.get("url"))
+    # If URL is just a path, we need to determine the host/port.
+    # In the context of IKOMA Runner, we check against the local bind if available.
+    # For now, we assume the URL in the manifest is absolute or we'll need to improve this.
+    if url.startswith("/"):
+        # Default to localhost:8080 for the sample app logic or similar
+        # This part might need refinement based on how Runner knows the port
+        logger.warning("URL de healthcheck relative détectée (%s), utilisation de http://localhost:8080%s", url, url)
+        url = f"http://localhost:8080{url}"
+
     expected_status = int(health.get("expected_status", DEFAULT_EXPECTED_STATUS))
     timeout = int(health.get("timeout", DEFAULT_HEALTH_TIMEOUT))
     interval = int(health.get("interval", DEFAULT_HEALTH_INTERVAL))

@@ -39,7 +39,10 @@ def load_release_config(repo_dir: Path, release_file: str) -> ReleaseConfig:
 
     _validate_release_payload(payload, release_path)
 
-    compose_file = repo_dir / payload.get("compose_file", "docker-compose.yml")
+    # Support both 'compose' and 'compose_file' keys for backward compatibility
+    compose_key = "compose" if "compose" in payload else "compose_file"
+    compose_file = repo_dir / payload.get(compose_key, "docker-compose.yml")
+    
     services = list(payload.get("services", []))
     health = dict(payload.get("health", {}))
 
@@ -65,9 +68,10 @@ def _validate_release_payload(payload: Dict[str, object], release_path: Path) ->
     if not isinstance(payload, dict):
         raise DeployError(f"Manifest {release_path} doit être un objet JSON")
 
-    compose_file = payload.get("compose_file", "docker-compose.yml")
+    compose_key = "compose" if "compose" in payload else "compose_file"
+    compose_file = payload.get(compose_key, "docker-compose.yml")
     if not isinstance(compose_file, str) or not compose_file.strip():
-        raise DeployError("La clé 'compose_file' doit être une chaîne non vide")
+        raise DeployError(f"La clé '{compose_key}' doit être une chaîne non vide")
 
     services = payload.get("services", [])
     if not isinstance(services, list) or not all(isinstance(s, str) and s for s in services):

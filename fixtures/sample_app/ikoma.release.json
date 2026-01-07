@@ -1,12 +1,8 @@
 {
-  "runtime": "docker_compose",
-  "compose_file": "docker-compose.yml",
-  "services": [],
+  "compose": "docker-compose.yml",
+  "services": ["web"],
   "health": {
-    "url": "http://localhost:8080/health",
-    "expected_status": 200,
-    "timeout": 60,
-    "interval": 2,
-    "retries": 15
+    "type": "http",
+    "url": "/"
   }
 }
